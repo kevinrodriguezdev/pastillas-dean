@@ -295,6 +295,9 @@ En Android, **no hace falta Atajo**: abre la app PWA, toca **Activar NFC** y ace
 
 ## 10. Decisiones de diseño y limitaciones
 
+- **Límite 2 pastillas / 24h:** el endpoint `/api/registrar-toma` rechaza con error `429` si ya hay 2 tomas en las últimas 24 horas. Si necesitas corregir, elimina la toma errónea del historial y vuelve a registrar.
+- **Eliminar del historial:** cada fila del historial tiene un icono de papelera. Al pulsarlo pide confirmación y borra la toma. Endpoint: `POST /api/eliminar-toma` con `{ id }` en el body.
+- **Notificación al registrar:** cada vez que se registra una toma, se envía push a TODOS los suscriptores (tag `pastilla-registrada`) con la hora exacta. Si tu pareja registra la pastilla, te llega al instante la notificación al móvil.
 - **Sin perfiles de usuario:** por simplicidad, no se registra quién dio la pastilla, solo que se dio. Si en el futuro quieres saber quién, añade una tabla `perfiles` y un campo `perfil text` en `tomas` (más selector en la home).
 - **Sin caché offline de tomas:** el Service Worker no cachea respuestas de Supabase, así que sin internet la app no mostrará datos antiguos. Esto es deliberado: las tomas deben ser precisas y siempre leer/escribir la fuente de verdad.
 - **Vercel Cron en plan Free:** puede hibernar. Si te pasa, usa cron-job.org o UptimeRobot para hacer ping cada 10-15 min a `/api/recordatorio-cron?key=TU_API_SECRET_KEY`.

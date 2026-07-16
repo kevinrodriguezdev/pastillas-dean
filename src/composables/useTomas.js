@@ -62,6 +62,26 @@ async function registrarToma(metodo) {
   return data;
 }
 
+async function eliminarToma(id) {
+  error.value = null;
+  const apiKey = import.meta.env.VITE_API_KEY;
+  const res = await fetch('/api/eliminar-toma', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(apiKey ? { 'x-api-key': apiKey } : {})
+    },
+    body: JSON.stringify({ id })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Error ${res.status}`);
+  }
+  // Quitamos la toma del array local sin recargar todo
+  todas.value = todas.value.filter((t) => t.id !== id);
+  return await res.json();
+}
+
 const ultimaToma = computed(() => todas.value[0] || null);
 
 const tomasHoy = computed(() => {
@@ -94,6 +114,7 @@ export function useTomas() {
     error,
     cargarHistorial,
     appendMas,
-    registrarToma
+    registrarToma,
+    eliminarToma
   };
 }
