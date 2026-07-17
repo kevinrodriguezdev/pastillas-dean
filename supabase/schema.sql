@@ -19,12 +19,18 @@ create index if not exists tomas_fecha_hora_desc_idx
 create table if not exists suscripciones (
   id uuid primary key default gen_random_uuid(),
   subscription jsonb not null,
+  -- Columna generada con el endpoint, necesaria para poder hacer
+  -- upsert con onConflict desde PostgREST (un unique index sobre una
+  -- expresión como (subscription->>'endpoint') NO es válido como
+  -- target de ON CONFLICT en PostgREST).
+  endpoint text generated always as (subscription->>'endpoint') stored,
   creado_en timestamptz not null default now()
 );
 
--- Índice único sobre el endpoint para evitar duplicados
-create unique index if not exists suscripciones_endpoint_unique
-  on suscripciones ((subscription->>'endpoint'));
+-- Constraint único sobre la columna generada (PostgREST lo reconoce como
+-- target válido de ON CONFLICT).
+alter table suscripciones
+  add constraint suscripciones_endpoint_unique unique (endpoint);
 
 -- Historial de notificaciones enviadas (para anti-spam del cron)
 create table if not exists notificaciones_enviadas (

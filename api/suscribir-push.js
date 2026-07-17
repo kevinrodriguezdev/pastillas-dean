@@ -39,13 +39,13 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message });
   }
 
-  // Upsert por endpoint único (índice en supabase/schema.sql).
+  // Upsert por endpoint único (columna generada + constraint en supabase/schema.sql).
   // Si el mismo dispositivo se re-suscribe, actualizamos en vez de duplicar.
   const { data, error } = await supabase
     .from('suscripciones')
     .upsert(
       { subscription },
-      { onConflict: 'subscription->>endpoint' }
+      { onConflict: 'endpoint' }
     )
     .select()
     .single();
