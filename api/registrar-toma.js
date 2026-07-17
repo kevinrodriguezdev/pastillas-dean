@@ -104,10 +104,23 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Error al guardar la toma en la base de datos' });
   }
 
-  // 3. Notificar a la familia (best-effort, no bloquea la respuesta)
-  notifyFamilia(data).catch((e) => {
+  // 3. Notificar a la familia. Importante: hay que hacer AWAIT, no fire-and-forget.
+  // Vercel Functions congelan el contexto de ejecución en cuanto se envía la
+  // respuesta al cliente, por lo que una promesa suelta nunca llegaría a llamar
+  // a web-push y el push a iOS/Android se perdería.
+  try {
+    const resultado = await notifyFamilia(data);
+    if (resultado) {
+      console.log(
+        `[push] nueva toma ${data.id}: enviadas=${resultado.enviadas} ` +
+        `fallidas=${resultado.fallidas} total=${resultado.total}`
+      );
+    } else {
+      console.log(`[push] nueva toma ${data.id}: sin suscriptores`);
+    }
+  } catch (e) {
     console.error('Error enviando push de nueva toma:', e);
-  });
+  }
 
   return res.status(201).json({ ok: true, toma: data });
 }
@@ -138,16 +151,24 @@ async function notifyFamilia(toma) {
     tag: 'pastilla-registrada'
   });
 
-  await Promise.allSettled(
+  const resultados = await Promise.allSettled(
     suscripciones.map(async (s) => {
       try {
         await webpush.sendNotification(s.subscription, payload);
+        return { id: s.id, ok: true };
       } catch (err) {
         if (err.statusCode === 404 || err.statusCode === 410) {
           await supabase.from('suscripciones').delete().eq('id', s.id);
         }
-        console.error(`Push failed for sub ${s.id}:`, err.message);
+        return { id: s.id, ok: false, error: err.message, statusCode: err.statusCode };
       }
     })
   );
+
+  const okCount = resultados.filter(
+    (r) => r.status === 'fulfilled' && r.value.ok
+  ).length;
+  const fallidas = resultados.length - okCount;
+
+  return { enviadas: okCount, fallidas, total: resultados.length };
 }
