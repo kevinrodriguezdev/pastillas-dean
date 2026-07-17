@@ -17,12 +17,12 @@ async function toggle() {
 </script>
 
 <template>
-  <div v-if="disponible" class="bg-white rounded-2xl shadow p-4">
+  <div v-if="disponible" class="bg-white/80 backdrop-blur rounded-2xl shadow-sm border border-dean-100 p-4">
     <div class="flex items-center justify-between gap-3">
       <div class="min-w-0">
-        <p class="font-semibold text-gray-900">Lector NFC</p>
-        <p class="text-sm text-gray-500 truncate">
-          {{ escaneando ? 'Acerca el tag al móvil' : 'Toca para activar el escaneo' }}
+        <p class="font-semibold text-dean-900">Lector NFC</p>
+        <p class="text-sm text-dean-600 truncate">
+          {{ escaneando ? 'Acerca el tag al móvil' : 'Toca para escanear el tag de Dean' }}
         </p>
       </div>
       <button
@@ -31,8 +31,8 @@ async function toggle() {
         :class="[
           'shrink-0 px-4 py-2 rounded-full font-semibold text-sm transition',
           escaneando
-            ? 'bg-emerald-500 text-white'
-            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            ? 'bg-dean-500 text-dean-50 hover:bg-dean-600'
+            : 'bg-dean-100 text-dean-700 hover:bg-dean-200'
         ]"
       >
         {{ escaneando ? 'Escaneando...' : 'Activar NFC' }}

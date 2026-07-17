@@ -6,6 +6,7 @@ import { useToast } from '@/composables/useToast.js';
 import StatusCard from '@/components/StatusCard.vue';
 import PillButton from '@/components/PillButton.vue';
 import NfcReader from '@/components/NfcReader.vue';
+import DeanLogo from '@/components/DeanLogo.vue';
 
 const {
   ultimaToma,
@@ -39,7 +40,7 @@ async function handleManual() {
   try {
     const res = await registrarToma('manual');
     const hora = res?.toma?.fecha_hora ? formatearHora(res.toma.fecha_hora) : '';
-    show(hora ? `Pastilla registrada a las ${hora}` : 'Pastilla registrada', 'success');
+    show(hora ? `¡Listo! Dean tiene su pastilla de las ${hora} 🐾` : '¡Pastilla registrada! 🐾', 'success');
   } catch (e) {
     show(e.message || 'No se pudo registrar la toma', 'error');
   } finally {
@@ -53,7 +54,7 @@ async function handleNfc() {
   try {
     const res = await registrarToma('nfc');
     const hora = res?.toma?.fecha_hora ? formatearHora(res.toma.fecha_hora) : '';
-    show(hora ? `Pastilla registrada por NFC a las ${hora}` : 'Pastilla registrada por NFC', 'success');
+    show(hora ? `Tag leído · Pastilla de las ${hora} 🐾` : 'Tag leído 🐾', 'success');
   } catch (e) {
     show(e.message || 'No se pudo registrar la toma', 'error');
   } finally {
@@ -79,11 +80,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="min-h-screen bg-gray-50 pb-24">
+  <main class="min-h-screen pb-24">
     <div class="max-w-md mx-auto p-4 space-y-4">
-      <header class="pt-2">
-        <h1 class="text-2xl font-bold text-gray-900">Pastillas del perro</h1>
-        <p class="text-sm text-gray-500">Una pastilla cada 12 horas</p>
+      <header class="pt-2 flex items-center gap-3">
+        <DeanLogo :size="56" />
+        <div class="min-w-0">
+          <h1 class="text-2xl font-extrabold text-dean-800 leading-tight">
+            Pastillas para Dean
+          </h1>
+          <p class="text-sm text-dean-600">Una cada 12 horas, sin olvidarnos 🐾</p>
+        </div>
       </header>
 
       <StatusCard
@@ -98,32 +104,32 @@ onUnmounted(() => {
 
       <div
         v-if="permiso === 'denied'"
-        class="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-800"
+        class="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-sm text-amber-900"
       >
-        Las notificaciones están bloqueadas. Actívalas en los ajustes del navegador
-        para recibir recordatorios.
+        Tienes las notificaciones bloqueadas. Actívalas en los ajustes para que la
+        familia avise cuando Dean necesite su pastilla.
       </div>
 
       <button
         v-if="permiso !== 'denied' && !suscrito"
         type="button"
         @click="activarPush"
-        class="w-full bg-white border-2 border-emerald-500 text-emerald-600 font-semibold py-3 rounded-2xl shadow-sm hover:bg-emerald-50 transition"
+        class="w-full bg-white border-2 border-dean-500 text-dean-700 font-semibold py-3 rounded-2xl shadow-sm hover:bg-dean-50 active:bg-dean-100 transition"
       >
-        🔔 Activar recordatorios push
+        🔔 Activar avisos de Dean
       </button>
 
       <div
         v-else-if="suscrito"
-        class="text-center text-sm text-emerald-600 font-medium py-1"
+        class="text-center text-sm text-dean-600 font-medium py-1"
       >
-        ✓ Recordatorios push activados
+        ✓ Recibirás avisos cuando le toque pastilla a Dean
       </div>
 
       <button
         type="button"
         @click="refrescar"
-        class="w-full text-sm text-gray-500 font-medium py-2 disabled:opacity-50"
+        class="w-full text-sm text-dean-600 font-medium py-2 disabled:opacity-50"
         :disabled="cargando"
       >
         {{ cargando ? 'Actualizando...' : 'Actualizar' }}
