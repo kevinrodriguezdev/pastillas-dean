@@ -38,6 +38,23 @@ create table if not exists notificaciones_enviadas (
   enviado_en timestamptz not null default now()
 );
 
+-- Stock de pastillas en la caja. Una sola fila (se inicializa con cantidad 0).
+-- ultimo_aviso_nivel sirve para no spamear: solo notificamos cuando CRUZA un
+-- umbral (null -> bajo, null -> critico, bajo -> critico). Se resetea al reponer.
+create table if not exists stock (
+  id uuid primary key default gen_random_uuid(),
+  cantidad integer not null default 0 check (cantidad >= 0),
+  actualizado_en timestamptz not null default now(),
+  ultimo_aviso_nivel text
+    check (ultimo_aviso_nivel in ('bajo', 'critico') or ultimo_aviso_nivel is null),
+  ultimo_aviso_en timestamptz
+);
+
+-- Fila única de stock (idempotente)
+insert into stock (cantidad)
+select 0
+where not exists (select 1 from stock);
+
 -- =============================================================================
 -- Row Level Security
 -- - service_role (usado por /api/*) BYPASSA RLS, así que puede hacer todo.
@@ -47,11 +64,16 @@ create table if not exists notificaciones_enviadas (
 alter table tomas enable row level security;
 alter table suscripciones enable row level security;
 alter table notificaciones_enviadas enable row level security;
+alter table stock enable row level security;
 
 drop policy if exists "tomas_select_anon" on tomas;
 create policy "tomas_select_anon" on tomas
   for select to anon using (true);
 
+drop policy if exists "stock_select_anon" on stock;
+create policy "stock_select_anon" on stock
+  for select to anon using (true);
+
 -- Las inserciones de tomas van SIEMPRE por /api/registrar-toma (service_role),
 -- así que NO creamos policy de INSERT para anon.
--- Las suscripciones y notificaciones solo se gestionan desde el backend.
+-- Las suscripciones, stock y notificaciones solo se gestionan desde el backend.

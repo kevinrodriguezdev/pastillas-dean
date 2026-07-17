@@ -1,9 +1,11 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue';
 import { useTomas } from '@/composables/useTomas.js';
+import { useStock } from '@/composables/useStock.js';
 import { usePushNotifications } from '@/composables/usePushNotifications.js';
 import { useToast } from '@/composables/useToast.js';
 import StatusCard from '@/components/StatusCard.vue';
+import StockCard from '@/components/StockCard.vue';
 import PillButton from '@/components/PillButton.vue';
 import NfcReader from '@/components/NfcReader.vue';
 import DeanLogo from '@/components/DeanLogo.vue';
@@ -17,6 +19,8 @@ const {
   registrarToma
 } = useTomas();
 
+const stockRef = ref(null);
+const { cargar: cargarStock } = useStock();
 const { activar: activarPush, comprobarInicial, suscrito, permiso } = usePushNotifications();
 const { show } = useToast();
 
@@ -31,7 +35,7 @@ function formatearHora(iso) {
 }
 
 async function refrescar() {
-  await cargarHistorial(50);
+  await Promise.all([cargarHistorial(50), cargarStock()]);
 }
 
 async function handleManual() {
@@ -41,6 +45,7 @@ async function handleManual() {
     const res = await registrarToma('manual');
     const hora = res?.toma?.fecha_hora ? formatearHora(res.toma.fecha_hora) : '';
     show(hora ? `¡Listo! Dean tiene su pastilla de las ${hora} 🐾` : '¡Pastilla registrada! 🐾', 'success');
+    await cargarStock();
   } catch (e) {
     show(e.message || 'No se pudo registrar la toma', 'error');
   } finally {
@@ -55,6 +60,7 @@ async function handleNfc() {
     const res = await registrarToma('nfc');
     const hora = res?.toma?.fecha_hora ? formatearHora(res.toma.fecha_hora) : '';
     show(hora ? `Tag leído · Pastilla de las ${hora} 🐾` : 'Tag leído 🐾', 'success');
+    await cargarStock();
   } catch (e) {
     show(e.message || 'No se pudo registrar la toma', 'error');
   } finally {
@@ -97,6 +103,8 @@ onUnmounted(() => {
         :proxima-toma-esperada="proximaTomaEsperada"
         :tomas-hoy="tomasHoy.length"
       />
+
+      <StockCard ref="stockRef" />
 
       <PillButton :cargando="registrando" @click="handleManual" />
 

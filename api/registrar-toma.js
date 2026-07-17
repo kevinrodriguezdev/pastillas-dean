@@ -104,7 +104,11 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Error al guardar la toma en la base de datos' });
   }
 
-  // 3. Notificar a la familia. Importante: hay que hacer AWAIT, no fire-and-forget.
+  // 3. Decrementar stock y comprobar si hay que avisar (umbral 3/2 días).
+  //    Best-effort: si falla, no bloqueamos el registro de la toma.
+  const stockInfo = await decrementarStock(supabase);
+
+  // 4. Notificar a la familia. Importante: hay que hacer AWAIT, no fire-and-forget.
   // Vercel Functions congelan el contexto de ejecución en cuanto se envía la
   // respuesta al cliente, por lo que una promesa suelta nunca llegaría a llamar
   // a web-push y el push a iOS/Android se perdería.
@@ -122,16 +126,127 @@ export default async function handler(req, res) {
     console.error('Error enviando push de nueva toma:', e);
   }
 
-  return res.status(201).json({ ok: true, toma: data });
+  // 5. Si el stock cruzó un umbral nuevo, avisar (también best-effort).
+  if (stockInfo && stockInfo.nivelCambio && stockInfo.nuevoNivel) {
+    try {
+      const resultado = await notifyStockBajo(
+        stockInfo.nuevaCantidad,
+        stockInfo.nuevoNivel
+      );
+      if (resultado) {
+        console.log(
+          `[push] stock ${stockInfo.nuevoNivel} (${stockInfo.nuevaCantidad} uds): ` +
+          `enviadas=${resultado.enviadas} fallidas=${resultado.fallidas} ` +
+          `total=${resultado.total}`
+        );
+      }
+    } catch (e) {
+      console.error('Error enviando push de stock bajo:', e);
+    }
+  }
+
+  return res.status(201).json({
+    ok: true,
+    toma: data,
+    stock: stockInfo
+      ? { cantidad: stockInfo.nuevaCantidad, nivel: stockInfo.nuevoNivel }
+      : null
+  });
+}
+
+// Decrementa el stock en 1 (sin bajar de 0) y devuelve el nuevo estado.
+// Devuelve null si no hay fila de stock configurada.
+async function decrementarStock(supabase) {
+  try {
+    const { data: rows, error: readError } = await supabase
+      .from('stock')
+      .select('id, cantidad, ultimo_aviso_nivel')
+      .order('actualizado_en', { ascending: false })
+      .limit(1);
+
+    if (readError) {
+      console.error('Error leyendo stock:', readError);
+      return null;
+    }
+    if (!rows || rows.length === 0) return null;
+
+    const stock = rows[0];
+    const nuevaCantidad = Math.max(0, stock.cantidad - 1);
+    let nuevoNivel;
+    if (nuevaCantidad > 6) nuevoNivel = null;
+    else if (nuevaCantidad <= 4) nuevoNivel = 'critico';
+    else nuevoNivel = 'bajo';
+
+    const nivelCambio = nuevoNivel !== stock.ultimo_aviso_nivel;
+    const ahora = new Date().toISOString();
+
+    const { error: updateError } = await supabase
+      .from('stock')
+      .update({
+        cantidad: nuevaCantidad,
+        actualizado_en: ahora,
+        ultimo_aviso_nivel: nuevoNivel,
+        ultimo_aviso_en: nivelCambio && nuevoNivel ? ahora : undefined
+      })
+      .eq('id', stock.id);
+
+    if (updateError) {
+      console.error('Error actualizando stock:', updateError);
+      return null;
+    }
+
+    return { nuevaCantidad, nuevoNivel, nivelCambio };
+  } catch (e) {
+    console.error('decrementarStock:', e);
+    return null;
+  }
 }
 
 async function notifyFamilia(toma) {
+  const hora = formatearHora(toma.fecha_hora);
+  return await enviarPushATodos({
+    title: 'Pastilla para Dean',
+    body: `Acaban de registrar una pastilla (${hora}).`,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    url: '/',
+    tag: 'pastilla-registrada'
+  });
+}
+
+async function notifyStockBajo(cantidad, nivel) {
+  const dias = Math.max(0, Math.floor(cantidad / 2));
+  let title;
+  let body;
+  let tag;
+  if (nivel === 'critico') {
+    title = '🚨 Pastillas para Dean';
+    body = cantidad === 0
+      ? 'Dean se ha quedado sin pastillas. Compra ya.'
+      : `Quedan solo ${cantidad} pastillas (${dias} ${dias === 1 ? 'día' : 'días'}). ¡Compra ya!`;
+    tag = 'stock-critico';
+  } else {
+    title = '⚠️ Pastillas para Dean';
+    body = `Quedan ${cantidad} pastillas (${dias} ${dias === 1 ? 'día' : 'días'}). Ve pensando en reponer.`;
+    tag = 'stock-bajo';
+  }
+  return await enviarPushATodos({
+    title,
+    body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    url: '/',
+    tag
+  });
+}
+
+async function enviarPushATodos(payload) {
   let supabase;
   try {
     supabase = getSupabaseAdmin();
     configurarWebPush();
   } catch (e) {
-    console.error('notifyFamilia config:', e.message);
+    console.error('enviarPushATodos config:', e.message);
     return;
   }
 
@@ -141,20 +256,12 @@ async function notifyFamilia(toma) {
 
   if (!suscripciones || suscripciones.length === 0) return;
 
-  const hora = formatearHora(toma.fecha_hora);
-  const payload = JSON.stringify({
-    title: 'Pastilla del perro',
-    body: `Acaban de registrar una pastilla (${hora}).`,
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-    url: '/',
-    tag: 'pastilla-registrada'
-  });
+  const payloadStr = JSON.stringify(payload);
 
   const resultados = await Promise.allSettled(
     suscripciones.map(async (s) => {
       try {
-        await webpush.sendNotification(s.subscription, payload);
+        await webpush.sendNotification(s.subscription, payloadStr);
         return { id: s.id, ok: true };
       } catch (err) {
         if (err.statusCode === 404 || err.statusCode === 410) {
