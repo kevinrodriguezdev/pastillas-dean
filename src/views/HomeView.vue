@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useTomas } from '@/composables/useTomas.js';
 import { useStock } from '@/composables/useStock.js';
 import { usePushNotifications } from '@/composables/usePushNotifications.js';
@@ -9,6 +10,9 @@ import StockCard from '@/components/StockCard.vue';
 import PillButton from '@/components/PillButton.vue';
 import NfcReader from '@/components/NfcReader.vue';
 import DeanLogo from '@/components/DeanLogo.vue';
+
+const route = useRoute();
+const router = useRouter();
 
 const {
   ultimaToma,
@@ -77,6 +81,10 @@ onMounted(async () => {
   await comprobarInicial();
   refreshInterval = setInterval(refrescar, 30 * 1000);
   document.addEventListener('visibilitychange', onVis);
+  if (route.query.nfc === '1') {
+    await handleNfc();
+    router.replace({ query: {} });
+  }
 });
 
 onUnmounted(() => {
